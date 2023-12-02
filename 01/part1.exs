@@ -1,4 +1,4 @@
-defmodule AdventOfCode.Ex01 do
+defmodule AdventOfCode.Day01.Part1 do
   @filename "input"
   @regex ~r/[1-9]/
 
@@ -28,4 +28,4 @@ defmodule AdventOfCode.Ex01 do
   end
 end
 
-IO.puts("#{AdventOfCode.Ex01.run()}")
+IO.puts("#{AdventOfCode.Day01.Part1.run()}")
