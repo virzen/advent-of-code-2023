@@ -1,4 +1,4 @@
-defmodule AdventOfCode.Day01.Part2 do
+defmodule AOC.Day01.Part2 do
   @filename "input"
   @regex ~r/[1-9]|one|two|three|four|five|six|seven|eight|nine/
   @reverted_regex ~r/[1-9]|eno|owt|eerht|ruof|evif|xis|neves|thgie|enin/

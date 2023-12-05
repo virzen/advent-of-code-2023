@@ -1,4 +1,4 @@
-defmodule AdventOfCode.Ex00 do
+defmodule AOC.Ex00 do
   def process(input) do
     input
     |> String.codepoints()

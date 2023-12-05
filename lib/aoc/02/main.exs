@@ -1,4 +1,4 @@
-defmodule AdventOfCode.Day03 do
+defmodule AOC.Day03 do
   @game_regex ~r/Game (.*):(.*)/
   @filename "input"
   @possible_maxes red: 12, green: 13, blue: 14
