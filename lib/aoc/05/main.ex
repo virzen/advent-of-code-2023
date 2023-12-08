@@ -72,10 +72,11 @@ defmodule AOC.Day05 do
     |> Stream.take(length)
   end
 
-  @subset_size 100
-  @chunk_size 75_000
-
-  def get_seed_ranges(sections) do
+  def get_seed_ranges(sections,
+        subset_size: subset_size,
+        chunk_size: chunk_size,
+        enable_progress: enable_progress
+      ) do
     {seeds, rest} = get_individual_seeds(sections)
 
     ranges =
@@ -87,18 +88,34 @@ defmodule AOC.Day05 do
       |> Enum.map(fn [_start, length] -> length end)
       |> Enum.sum()
 
-    IO.puts("#{sum / 1_000_000} mln seeds to map")
-    IO.puts("#{sum / @chunk_size} chunks to process")
+    # IO.puts("#{sum / 1_000_000} mln seeds to map")
+    # IO.puts("#{sum / chunk_size} chunks to process")
 
     unfolded =
       ranges
       |> Enum.map(&stream_of_range/1)
       |> Stream.concat()
-      # |> Stream.take(@subset_size)
-      # could be extracted to count_progress
-      |> raport_stream_progress(sum, 1_000_000)
 
-    {unfolded, rest}
+    result =
+      case {subset_size, enable_progress} do
+        {nil, false} ->
+          unfolded
+
+        {nil, true} ->
+          unfolded
+          |> raport_stream_progress(sum, div(sum, 10_000))
+
+        {subset_size, true} ->
+          unfolded
+          |> Stream.take(subset_size)
+          |> raport_stream_progress(subset_size, div(subset_size, 10_000))
+
+        {subset_size, false} ->
+          unfolded
+          |> Stream.take(subset_size)
+      end
+
+    {result, rest}
   end
 
   def get_map_range_of_section(section) do
@@ -153,27 +170,30 @@ defmodule AOC.Day05 do
     value
   end
 
-  def get_locations_for_seeds_lazily({seeds_stream, mappings}) do
+  def get_locations_for_seeds_lazily({seeds_stream, mappings}, chunk_size: chunk_size) do
     seeds_stream
     # |> Stream.map(fn seed ->
     #   apply_all_mappings(seed, mappings)
     # end)
-    |> Stream.chunk_every(@chunk_size)
-    |> Task.async_stream(fn seeds_chunk ->
-      # on separate process!
-      # IO.puts("starting chunk starting with #{hd(seeds_chunk)}")
+    |> Stream.chunk_every(chunk_size)
+    |> Task.async_stream(
+      fn seeds_chunk ->
+        # on separate process!
+        # IO.puts("starting chunk starting with #{hd(seeds_chunk)}")
 
-      min =
-        seeds_chunk
-        |> Stream.map(fn seed ->
-          apply_all_mappings(seed, mappings)
-        end)
-        |> Enum.min()
+        min =
+          seeds_chunk
+          |> Stream.map(fn seed ->
+            apply_all_mappings(seed, mappings)
+          end)
+          |> Enum.min()
 
-      # IO.puts("finished chunk with min #{min}")
+        # IO.puts("finished chunk with min #{min}")
 
-      min
-    end)
+        min
+      end,
+      timeout: 999_999_999_999
+    )
     |> Stream.map(fn {:ok, num} -> num end)
   end
 
@@ -195,18 +215,38 @@ defmodule AOC.Day05 do
     |> Enum.min()
   end
 
-  def run_part_2(input) do
+  defp default_opts() do
+    %{chunk_size: 100_000, subset_size: nil, enable_progress: false}
+  end
+
+  def read_input(type \\ :input) do
     filename =
-      case input do
+      case type do
         :input -> "lib/aoc/05/input"
         :example -> "lib/aoc/05/example-input"
       end
 
     File.read!(filename)
+  end
+
+  def read_and_run_part_2(input, opts \\ []) do
+    read_input(input)
+    |> run_part_2(opts)
+  end
+
+  def run_part_2(input, opts \\ []) do
+    %{chunk_size: chunk_size, subset_size: subset_size, enable_progress: enable_progress} =
+      Enum.into(opts, default_opts())
+
+    input
     |> get_sections()
-    |> get_seed_ranges()
+    |> get_seed_ranges(
+      subset_size: subset_size,
+      chunk_size: chunk_size,
+      enable_progress: enable_progress
+    )
     |> get_ranges()
-    |> get_locations_for_seeds_lazily()
+    |> get_locations_for_seeds_lazily(chunk_size: chunk_size)
     |> Enum.min()
   end
 end
