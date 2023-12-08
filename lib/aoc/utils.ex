@@ -4,7 +4,7 @@ defmodule AOC.Utils do
     int
   end
 
-  defp is_digit(str) do
+  def is_digit(str) do
     Regex.match?(~r/[0-9]/, str)
   end
 end
