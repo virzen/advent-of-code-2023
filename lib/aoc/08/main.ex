@@ -66,8 +66,6 @@ defmodule AOC.Day08 do
     count
   end
 
-  @start_to_end_example %{"11A" => "11Z", "22A" => "22Z"}
-
   def count_steps_from_to(path, map, start_point, end_point) do
     path_tream = Stream.cycle(path)
 
@@ -80,8 +78,6 @@ defmodule AOC.Day08 do
             "L" -> left
             "R" -> right
           end
-
-        IO.puts("#{point_name}, #{direction} -> #{next_point}")
 
         halt_or_cont =
           if next_point == end_point do
@@ -115,15 +111,58 @@ defmodule AOC.Day08 do
     |> Map.new()
   end
 
-  def run_part_2() do
+  @start_to_end_example %{"11A" => "11Z", "22A" => "22Z"}
+
+  @start_to_end %{
+    "GDA" => "SGZ",
+    "NXA" => "BBZ",
+    "AAA" => "ZZZ",
+    "PLA" => "MQZ",
+    "RMA" => "FQZ",
+    "QLA" => "VHZ"
+  }
+
+  def run_part_2_example() do
     {path, map} = parse_input("lib/aoc/08/example-input-part-2")
     starting_points = get_starting_points(map)
 
     Enum.map(
       starting_points,
-      &count_steps_from_to(path, map, &1, Map.get(@start_to_end_example, &1))
+      fn point ->
+        destination = Map.get(@start_to_end_example, point)
+        IO.puts("#{point} -> #{destination}")
+        count = count_steps_from_to(path, map, point, destination)
+        IO.puts(count)
+        count
+      end
     )
     |> Enum.reduce(&lcm/2)
+    |> IO.puts()
+  end
+
+  def run_part_2() do
+    {path, map} = parse_input("lib/aoc/08/input")
+    starting_points = get_starting_points(map)
+
+    Enum.map(
+      starting_points,
+      fn point ->
+        destination = Map.get(@start_to_end, point)
+        IO.puts("#{point} -> #{destination}")
+        count = count_steps_from_to(path, map, point, destination)
+        IO.puts(count)
+        count
+      end
+    )
+    |> Enum.reduce(&lcm/2)
+    |> IO.puts()
+  end
+
+  def run_part_2_procomputed() do
+    {path, map} = parse_input("lib/aoc/08/input")
+    # count_steps_to_zzz_2(path, map)
+    precomputed_map = precompute_whole_paths_map(path, map)
+    count_steps_on_precomputed(precomputed_map) * length(path)
   end
 
   def lcm(a, b) do
