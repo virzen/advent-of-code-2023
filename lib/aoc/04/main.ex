@@ -17,10 +17,6 @@ defmodule AOC.Day04 do
     end
   end
 
-  def is_empty_string(str) do
-    str == ""
-  end
-
   def parse_numbers(numbers_string) do
     numbers_string
     |> String.trim()

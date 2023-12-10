@@ -7,4 +7,8 @@ defmodule AOC.Utils do
   def is_digit(str) do
     Regex.match?(~r/[0-9]/, str)
   end
+
+  def is_empty_string(str) do
+    str == ""
+  end
 end
