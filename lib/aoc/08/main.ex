@@ -4,16 +4,20 @@ defmodule AOC.Day08 do
   # 714 punktow
   # 277 lewo-prawo
   # 6 punktow startowych
+  # punkty końcowe zawsze po pełnej iteracji ścieżki
+  # każdy punkt startowy ma swój końcowy
+
+  # dla każdego punktu długość ścieżki do końca i potem NWW
 
   def parse_input(path) do
-    [path, _ | points] =
+    [path, _ | map] =
       File.read!(path)
       |> String.split("\n")
 
     path = path |> String.trim() |> String.split("") |> Enum.reject(&is_empty_string/1)
 
-    points =
-      points
+    map =
+      map
       |> Enum.map(fn point_def ->
         [name, pair] = String.split(point_def, " = ")
 
@@ -23,12 +27,12 @@ defmodule AOC.Day08 do
       end)
       |> Map.new(fn x -> x end)
 
-    {path, points}
+    {path, map}
   end
 
   def run_part_1 do
-    {path, points} = parse_input("lib/aoc/08/input")
-    count_steps_to_zzz_1(path, points)
+    {path, map} = parse_input("lib/aoc/08/input")
+    count_steps_to_zzz_1(path, map)
   end
 
   def count_steps_to_zzz_1(path, map) do
@@ -38,8 +42,8 @@ defmodule AOC.Day08 do
     # count_steps_to_zzz_rec(path_tream, map, "AAA", 0)
 
     {_, count} =
-      Enum.reduce_while(path_tream, {"AAA", 0}, fn direction, {point, count} ->
-        {left, right} = Map.get(map, point)
+      Enum.reduce_while(path_tream, {"AAA", 0}, fn direction, {point_name, count} ->
+        {left, right} = Map.get(map, point_name)
 
         next_point =
           case direction do
@@ -47,7 +51,7 @@ defmodule AOC.Day08 do
             "R" -> right
           end
 
-        IO.inspect("#{point}, #{direction} -> #{next_point}")
+        IO.inspect("#{point_name}, #{direction} -> #{next_point}")
 
         halt_or_cont =
           if next_point == "ZZZ" do
@@ -62,9 +66,70 @@ defmodule AOC.Day08 do
     count
   end
 
+  @start_to_end_example %{"11A" => "11Z", "22A" => "22Z"}
+
+  def count_steps_from_to(path, map, start_point, end_point) do
+    path_tream = Stream.cycle(path)
+
+    {_, count} =
+      Enum.reduce_while(path_tream, {start_point, 0}, fn direction, {point_name, count} ->
+        {left, right} = Map.get(map, point_name)
+
+        next_point =
+          case direction do
+            "L" -> left
+            "R" -> right
+          end
+
+        IO.puts("#{point_name}, #{direction} -> #{next_point}")
+
+        halt_or_cont =
+          if next_point == end_point do
+            :halt
+          else
+            :cont
+          end
+
+        {halt_or_cont, {next_point, count + 1}}
+      end)
+
+    count
+  end
+
+  def precompute_whole_paths_map(path, map) do
+    Enum.map(map, fn point_name ->
+      {name, _targets} = point_name
+
+      new_target =
+        Enum.reduce(path, name, fn direction, name ->
+          {left, right} = Map.get(map, name)
+
+          case direction do
+            "L" -> left
+            "R" -> right
+          end
+        end)
+
+      {name, new_target}
+    end)
+    |> Map.new()
+  end
+
   def run_part_2() do
-    {path, points} = parse_input("lib/aoc/08/input")
-    count_steps_to_zzz_2(path, points)
+    {path, map} = parse_input("lib/aoc/08/example-input-part-2")
+    starting_points = get_starting_points(map)
+
+    Enum.map(
+      starting_points,
+      &count_steps_from_to(path, map, &1, Map.get(@start_to_end_example, &1))
+    )
+    |> Enum.reduce(&lcm/2)
+  end
+
+  def lcm(a, b) do
+    gcd = Integer.gcd(a, b)
+
+    trunc(a / gcd * (b / gcd) * gcd)
   end
 
   def ends_with_A(str) do
@@ -75,11 +140,77 @@ defmodule AOC.Day08 do
     String.match?(str, ~r/[Z]$/)
   end
 
+  def get_starting_points(map) do
+    map
+    |> Map.keys()
+    |> Enum.filter(&ends_with_A/1)
+  end
+
+  def count_steps_on_precomputed(precomputed_map) do
+    starting_points = get_starting_points(precomputed_map)
+
+    {result, count} =
+      Stream.cycle([1])
+      |> Enum.reduce_while({starting_points, 0}, fn _, {points, count} ->
+        # logging
+        some_starting = Enum.any?(points, &ends_with_A/1)
+        some_ending = Enum.any?(points, &ends_with_Z/1)
+
+        if some_starting or some_ending do
+          count_As = Enum.count(points, &ends_with_A/1)
+          count_Zs = Enum.count(points, &ends_with_Z/1)
+
+          if count_As > 2 or count_Zs > 2 do
+            colored_points =
+              Enum.map(points, fn point ->
+                cond do
+                  ends_with_A(point) -> IO.ANSI.blue() <> point <> IO.ANSI.reset()
+                  ends_with_Z(point) -> IO.ANSI.red() <> point <> IO.ANSI.reset()
+                  true -> point
+                end
+              end)
+              |> Enum.join(", ")
+
+            cond do
+              some_starting and some_ending ->
+                IO.puts("#{count}: #{colored_points} any with A or Z, #{count_As}, #{count_Zs}")
+
+              some_starting ->
+                IO.puts("#{count}: #{colored_points} any with A, #{count_As}")
+
+              some_ending ->
+                IO.puts("#{count}: #{colored_points} any with Z, #{count_Zs}")
+
+              true ->
+                nil
+            end
+          end
+        end
+
+        # end loggin
+
+        next_points =
+          Enum.map(points, fn point_name -> Map.get(precomputed_map, point_name) end)
+
+        next_count = count + 1
+
+        halt_or_cont =
+          if Enum.all?(next_points, &ends_with_Z/1) do
+            :halt
+          else
+            :cont
+          end
+
+        {halt_or_cont, {next_points, next_count}}
+      end)
+
+    IO.puts("result: #{inspect(result)}")
+
+    count
+  end
+
   def count_steps_to_zzz_2(path, map) do
-    starting_points =
-      map
-      |> Map.keys()
-      |> Enum.filter(&ends_with_A/1)
+    starting_points = get_starting_points(map)
 
     # IO.inspect(starting_points, map)
 
