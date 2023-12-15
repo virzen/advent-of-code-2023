@@ -11,4 +11,8 @@ defmodule AOC.Utils do
   def is_empty_string(str) do
     str == ""
   end
+
+  def id(x) do
+    x
+  end
 end
