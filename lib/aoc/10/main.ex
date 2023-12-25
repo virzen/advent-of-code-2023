@@ -193,6 +193,8 @@ defmodule MapMatrix do
 
   @doc """
   Receives val, {x, y}, %MapMatrix{}. Last argument is a MapMatrix of items around val, excluding val.
+
+  Doesn't make sense to leave old coords, even though sometimes it might be useful. Should be 0, 0, 1, 0 etc.
   """
   def map_convolutional(matrix, f) do
     {width, height} = size(matrix)
@@ -214,6 +216,19 @@ defmodule MapMatrix do
 
   def coords_moved_by({ox, oy} = _original, {dx, dy} = _delta) do
     {ox + dx, oy + dy}
+  end
+
+  def to_full_graph_of_coords(matrix) do
+    matrix
+    |> MapMatrix.map(fn _val, coords ->
+      matrix
+      |> get_convolution_matrix(coords)
+      |> Map.drop([:width, :height])
+      |> Enum.filter(fn {key, val} -> val != :out_of_bounds end)
+      |> Map.new()
+      |> Map.keys()
+    end)
+    |> Map.drop([:height, :width])
   end
 end
 
@@ -294,6 +309,10 @@ defmodule AOC.D10.PipeLabirynth do
   def is_start?(pipe) do
     pipe == @start
   end
+
+  def is_pipe?(maybe_pipe) do
+    Enum.member?(Map.keys(@entries), maybe_pipe)
+  end
 end
 
 defmodule AOC.D10 do
@@ -307,7 +326,7 @@ defmodule AOC.D10 do
     start_coords = MapMatrix.find_coords(matrix, &PL.is_start?/1)
 
     matrix
-    |> matrix_to_graph()
+    |> matrix_to_pipe_graph()
     |> find_loop(start_coords)
     |> length()
     |> Kernel.-(1)
@@ -315,18 +334,29 @@ defmodule AOC.D10 do
   end
 
   def run_2() do
+    dir_path = "lib/aoc/10/"
+    input_file = "input"
+
+    IO.puts("Reading file...")
+
     matrix =
-      File.read!("lib/aoc/10/example-input-2-2")
+      File.read!(dir_path <> input_file)
       |> MapMatrix.from_string()
 
     IO.puts(MapMatrix.to_string(matrix))
 
-    start_coords = MapMatrix.find_coords(matrix, &PL.is_start?/1)
+    IO.puts("Calculating start coords...")
+    start_coords = MapMatrix.find_coords(matrix, &PL.is_start?/1) |> IO.inspect()
+
+    IO.puts("Calculating loop path...")
 
     path =
       matrix
-      |> matrix_to_graph()
+      |> matrix_to_pipe_graph()
       |> find_loop(start_coords)
+      |> IO.inspect()
+
+    IO.puts("Calculating interspersed version of input...")
 
     interspersed =
       matrix
@@ -334,7 +364,9 @@ defmodule AOC.D10 do
 
     interspersed
     |> MapMatrix.to_string()
-    |> IO.puts()
+    |> then(&File.write!(dir_path <> input_file <> "-interspersed", &1))
+
+    IO.puts("Translating path to interspersed version...")
 
     interspersed_path =
       Enum.map(path, &translate_point_to_interspersed/1)
@@ -362,31 +394,131 @@ defmodule AOC.D10 do
     # un-intersperse
     # count dots that are left
 
-    interspersed
-    # |> MapMatrix.map_convolutional(fn _val, coords, conv_matrix ->
-    #   is_in_path = Enum.member?(interspersed_path, coords)
+    IO.puts("Filling interspersed matrix with missing pipes...")
 
-    #   IO.puts("#{inspect(coords)}: #{inspect(conv_matrix)}")
+    filled =
+      interspersed
+      # |> MapMatrix.map_convolutional(fn _val, coords, conv_matrix ->
+      #   is_in_path = Enum.member?(interspersed_path, coords)
 
-    #   is_outside =
-    #     MapMatrix.any?(conv_matrix, &(&1 == :out_of_bounds or &1 == "O"))
+      #   IO.puts("#{inspect(coords)}: #{inspect(conv_matrix)}")
 
-    #   IO.puts("#{is_outside}")
+      #   is_outside =
+      #     MapMatrix.any?(conv_matrix, &(&1 == :out_of_bounds or &1 == "O"))
 
-    #   # IO.puts("#{val}, #{inspect({x, y})}, #{conv_matrix |> MapMatrix.to_string()}")
-    #   cond do
-    #     is_in_path -> "P"
-    #     is_outside -> "O"
-    #     true -> "I"
-    #   end
-    # end)
-    |> MapMatrix.map_convolutional(fn val, coords, conv_matrix ->
-      is_to_fix = val == "." and Enum.member?(interspersed_path, coords)
+      #   IO.puts("#{is_outside}")
 
-      IO.puts("#{val}, #{inspect(coords)}: #{is_to_fix}")
+      #   # IO.puts("#{val}, #{inspect({x, y})}, #{conv_matrix |> MapMatrix.to_string()}")
+      #   cond do
+      #     is_in_path -> "P"
+      #     is_outside -> "O"
+      #     true -> "I"
+      #   end
+      # end)
+      |> MapMatrix.map(fn val, coords ->
+        is_to_fix = val == "." and Enum.member?(interspersed_path, coords)
+
+        {top, bottom, left, right} = {
+          MapMatrix.at(interspersed, MapMatrix.coords_moved_by(coords, {0, -1})),
+          MapMatrix.at(interspersed, MapMatrix.coords_moved_by(coords, {0, 1})),
+          MapMatrix.at(interspersed, MapMatrix.coords_moved_by(coords, {-1, 0})),
+          MapMatrix.at(interspersed, MapMatrix.coords_moved_by(coords, {1, 0}))
+        }
+
+        cond do
+          is_to_fix and PL.is_pipe?(top) and PL.is_pipe?(bottom) -> "|"
+          is_to_fix and PL.is_pipe?(left) and PL.is_pipe?(right) -> "-"
+          true -> val
+        end
+      end)
+
+    # |> MapMatrix.to_string()
+    # |> IO.puts()
+
+    filled
+    |> MapMatrix.to_string()
+    |> then(&File.write!(dir_path <> input_file <> "-inter-filled", &1))
+
+    IO.puts("Visualizing interspersed path...")
+    # colored path
+    filled
+    |> MapMatrix.map(fn val, coords ->
+      if Enum.member?(interspersed_path, coords) do
+        IO.ANSI.red() <> val <> IO.ANSI.reset()
+      else
+        val
+      end
     end)
-    |> matrix_to_graph()
-    |> get_all_vertices_inside(interspersed_path)
+    |> MapMatrix.to_string()
+    |> tap(fn str ->
+      File.write!(dir_path <> input_file <> "-inter-path-vis", str)
+    end)
+
+    IO.puts("Translating start coords to interspersed...")
+
+    start_coords_interspersed =
+      start_coords
+      |> translate_point_to_interspersed()
+      |> MapMatrix.coords_moved_by({1, 1})
+      |> IO.inspect()
+
+    IO.puts("Calculating full graph from interspersed and filled input...")
+
+    maybe_vertices_inside_interspersed =
+      filled
+      |> MapMatrix.to_full_graph_of_coords()
+      |> tap(fn _ ->
+        IO.puts("Calculating vertices inside the path...")
+      end)
+      |> get_all_vertices_inside(interspersed_path, start_coords_interspersed)
+
+    IO.puts("Translating vertices back to original coords and getting rid of artificial ones...")
+
+    maybe_vertices_inside =
+      maybe_vertices_inside_interspersed
+      |> Enum.reject(fn {x, y} ->
+        rem(x, 2) == 1 or rem(y, 2) == 1
+      end)
+      |> Enum.map(&translate_point_to_uninterspersed/1)
+      |> IO.inspect()
+
+    IO.puts("Visualizing found inside verticies...")
+    # inside interspersed
+    filled
+    |> MapMatrix.map(fn val, coords ->
+      if Enum.member?(maybe_vertices_inside_interspersed, coords) do
+        IO.ANSI.red() <> val <> IO.ANSI.reset()
+      else
+        val
+      end
+    end)
+    |> MapMatrix.to_string()
+    |> tap(fn str ->
+      File.write!(dir_path <> input_file <> "-inter-inside-vis", str)
+    end)
+
+    IO.puts("Visualizing inside vertices on origin input")
+
+    matrix
+    |> MapMatrix.map(fn val, coords ->
+      if Enum.member?(maybe_vertices_inside, coords) do
+        IO.ANSI.red() <> val <> IO.ANSI.reset()
+      else
+        val
+      end
+    end)
+    |> MapMatrix.to_string()
+    |> tap(&File.write!(dir_path <> input_file <> "-inside-original-vis", &1))
+
+    IO.puts("Getting final results...")
+    maybe_vertices_inside |> length() |> then(&IO.puts("vertices 'inside': #{&1}"))
+
+    MapMatrix.size(matrix)
+    |> then(fn {x, y} ->
+      IO.puts("elements total: #{x * y}")
+    end)
+
+    path |> length() |> then(&IO.puts("path length: #{&1}"))
 
     # |> MapMatrix.map(fn val, coords ->
     #   cond do
@@ -405,7 +537,11 @@ defmodule AOC.D10 do
     {x * 2, y * 2}
   end
 
-  def matrix_to_graph(matrix) do
+  def translate_point_to_uninterspersed({x, y}) do
+    {trunc(x / 2), trunc(y / 2)}
+  end
+
+  def matrix_to_pipe_graph(matrix) do
     matrix
     |> MapMatrix.map(fn val, {x, y} ->
       exits = PL.entries_of(val)
@@ -464,34 +600,45 @@ defmodule AOC.D10 do
     end)
   end
 
-  def get_all_vertices_inside(graph, loop_path) do
-    start_coords = {1, 5}
+  def get_all_vertices_inside(graph, loop_path, start_coords) do
+    a = get_all_vertices_inside_step(graph, MapSet.new(loop_path), MapSet.new(), {133, 149})
+    # b = get_all_vertices_inside_step(graph, MapSet.new(loop_path), MapSet.new(), {273, 123})
 
-    get_all_vertices_inside_step(graph, loop_path, [], start_coords)
+    # MapSet.union(a, b)
+
+    a
   end
 
   @doc """
   Traverses as long as there is something to traverse
-
-  TODO: change to BFS, so every vertex is checked only once
   """
-  def get_all_vertices_inside_step(graph, loop_path, path, vertex) do
-    adjacent = MapGraph.get_adjacent(graph, vertex) |> IO.inspect()
+  def get_all_vertices_inside_step(graph, loop_path, visited, vertex) do
+    IO.puts("visited: #{MapSet.size(visited)}")
+
+    adjacent = MapGraph.get_adjacent(graph, vertex)
 
     to_lookup =
       Enum.reject(adjacent, fn ad_vertex ->
-        last = List.first(path)
-        Enum.member?(path, ad_vertex) or ad_vertex == last
+        # TODO: speed up with sets?
+        is_visited = MapSet.member?(visited, ad_vertex)
+        is_part_of_the_loop = MapSet.member?(loop_path, ad_vertex)
+
+        is_visited or is_part_of_the_loop
       end)
+
+    new_visited = MapSet.put(visited, vertex)
 
     case to_lookup do
       [] ->
-        path
+        new_visited
 
       some ->
-        Enum.flat_map(some, fn vertex_to_lookup ->
-          get_all_vertices_inside_step(graph, loop_path, [vertex | path], vertex_to_lookup)
+        # recursive stream?
+        Enum.reduce(some, new_visited, fn vertex_to_lookup, acc_visited ->
+          get_all_vertices_inside_step(graph, loop_path, acc_visited, vertex_to_lookup)
         end)
     end
   end
 end
+
+# MapTensor?
